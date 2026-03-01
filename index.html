@@ -1286,37 +1286,50 @@ function renderDoughnut(pos, neu, neg) {
 // ─── WORD CLOUD ────────────────────────────────────────────────────────────────
 function renderWordCloud(wordData) {
   const canvas = document.getElementById('wordcloudCanvas');
-  const W = canvas.parentElement.clientWidth - 40;
-  const H = 250;
-  canvas.width = W;
+  const parent = canvas.parentElement;
+
+  // Get real pixel dimensions — use offsetWidth to force layout
+  const W = parent.offsetWidth - 40;
+  const H = 260;
+
+  if (W <= 0) {
+    // Panel hasn't painted yet, try again shortly
+    setTimeout(() => renderWordCloud(wordData), 150);
+    return;
+  }
+
+  canvas.width  = W;
   canvas.height = H;
 
   const maxFreq = wordData[0]?.[1] || 1;
-  const words = wordData.slice(0, 50).map(([word, count]) => {
-    const size = Math.floor(12 + (count / maxFreq) * 42);
-    const colors = [
-      '#00ff6a', '#00cc55', '#00aa44',
-      '#ffb800', '#cc9400', '#887300',
-      '#88eeaa',
-    ];
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    return [word, size, color];
-  });
+  const palette = [
+    '#00ff6a','#00cc55','#00aa44','#007733',
+    '#ffb800','#cc9400','#887300',
+    '#88eeaa','#44cc88',
+  ];
 
-  WordCloud(canvas, {
-    list: words.map(([w, s, c]) => [w, s]),
-    fontFamily: 'Bebas Neue, sans-serif',
-    color: (word, weight) => {
-      const entry = words.find(([w]) => w === word);
-      return entry ? entry[2] : '#00ff6a';
-    },
-    backgroundColor: 'transparent',
-    rotateRatio: 0.3,
-    rotationSteps: 2,
-    minSize: 10,
-    shuffle: true,
-    gridSize: 8,
-    weightFactor: 1,
+  // Build list as [word, weight] — weight drives fontSize via weightFactor
+  const list = wordData.slice(0, 50).map(([word, count]) => [word, count]);
+
+  document.fonts.ready.then(() => {
+    WordCloud(canvas, {
+      list,
+      fontFamily: '"Bebas Neue", sans-serif',
+      weightFactor: (size) => {
+        // Map raw frequency to a px font size between 13 and 54
+        return 13 + (size / maxFreq) * 41;
+      },
+      color: (word) => palette[Math.abs(
+        word.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
+      ) % palette.length],
+      backgroundColor: 'transparent',
+      rotateRatio: 0.25,
+      rotationSteps: 2,
+      minSize: 10,
+      gridSize: Math.round(W / 60),
+      shuffle: false,
+      drawOutOfBound: false,
+    });
   });
 }
 
@@ -1437,7 +1450,8 @@ function renderDashboard(data) {
 
   // Word cloud
   if (word_cloud && word_cloud.length > 0) {
-    setTimeout(() => renderWordCloud(word_cloud), 300);
+   // Small delay so the panel is in the DOM and has a real offsetWidth
+setTimeout(() => renderWordCloud(currentData.word_cloud), 200);
   }
 
   // Ticker
