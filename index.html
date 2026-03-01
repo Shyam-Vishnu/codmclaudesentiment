@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CODM SENTINEL — Community Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Share+Tech+Mono&family=Barlow+Condensed:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/wordcloud2.js@1.2.2/src/wordcloud2.js"></script>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   CSS VARIABLES & RESET
+═══════════════════════════════════════════════════════════════ */
+:root {
+  --bg: #080c0a;
+  --bg2: #0d1210;
+  --bg3: #111916;
+  --panel: #0a110e;
+  --border: #1a2e22;
+  --border-bright: #234830;
+  --green: #00ff6a;
+  --green-dim: #00cc55;
+  --green-dark: #003318;
+  --amber: #ffb800;
+  --amber-dim: #cc9400;
+  --red: #ff3333;
+  --red-dim: #cc2222;
+  --red-dark: #2a0a0a;
+  --text: #c8e0cd;
+  --text-dim: #6a8a72;
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-body: 'Barlow Condensed', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* ─── Scanlines Overlay ─────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  animation: scanMove 8s linear infinite;
+}
+
+@keyframes scanMove {
+  from { background-position: 0 0; }
+  to   { background-position: 0 100px; }
+}
+
+/* ─── Vignette ──────────────────────────────────────────────── */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9998;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.7) 100%);
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LOADING OVERLAY
+═══════════════════════════════════════════════════════════════ */
+#loading-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: var(--bg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 32px;
+  transition: opacity 0.6s ease;
+}
+
+#loading-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.load-logo {
+  font-family: var(--font-display);
+  font-size: 56px;
+  letter-spacing: 0.15em;
+  color: var(--green);
+  text-shadow: 0 0 30px var(--green), 0 0 60px rgba(0,255,106,0.3);
+  animation: loadPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loadPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.load-subtitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.load-bar-wrap {
+  width: 300px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.load-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--green-dim), var(--green));
+  border-radius: 2px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px var(--green);
+}
+
+.load-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--green-dim);
+  letter-spacing: 0.2em;
+  min-height: 14px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HEADER
+═══════════════════════════════════════════════════════════════ */
+#site-header {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,12,10,0.96);
+  border-bottom: 1px solid var(--border-bright);
+  backdrop-filter: blur(10px);
+  padding: 0 24px;
+  height: 56px;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 4px 30px rgba(0,255,106,0.05);
+}
+
+.header-left {
+  display: flex; align-items: center; gap: 16px;
+}
+
+.header-logo {
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: 0.12em;
+  color: var(--green);
+  text-shadow: 0 0 20px rgba(0,255,106,0.5);
+  line-height: 1;
+}
+
+.header-divider {
+  width: 1px; height: 24px;
+  background: var(--border-bright);
+}
+
+.status-dot-wrap {
+  display: flex; align-items: center; gap: 8px;
+}
+
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: statusPulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.status-dot.stale {
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber);
+  animation: none;
+}
+
+.status-dot.error {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+  animation: none;
+}
+
+@keyframes statusPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.7; }
+}
+
+.status-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.header-right {
+  display: flex; align-items: center; gap: 12px;
+}
+
+.last-updated {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+
+.btn-refresh {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: var(--green);
+  background: transparent;
+  border: 1px solid var(--green-dim);
+  padding: 6px 14px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-refresh:hover {
+  background: rgba(0,255,106,0.08);
+  box-shadow: 0 0 12px rgba(0,255,106,0.2);
+}
+
+.btn-refresh.loading {
+  color: var(--text-dim);
+  border-color: var(--border-bright);
+  cursor: not-allowed;
+}
+
+.btn-refresh::before {
+  content: '';
+  position: absolute; top: 50%; left: -30px;
+  width: 20px; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(0,255,106,0.2), transparent);
+  transform: translateY(-50%) skewX(-15deg);
+  animation: shimmer 2s infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  0% { left: -30px; }
+  100% { left: 120%; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TICKER BAND
+═══════════════════════════════════════════════════════════════ */
+#ticker-wrap {
+  background: var(--green-dark);
+  border-bottom: 1px solid var(--border-bright);
+  height: 30px;
+  overflow: hidden;
+  position: relative;
+  display: flex; align-items: center;
+}
+
+#ticker-wrap::before,
+#ticker-wrap::after {
+  content: '';
+  position: absolute; top: 0; bottom: 0; width: 60px; z-index: 2;
+  pointer-events: none;
+}
+
+#ticker-wrap::before {
+  left: 0;
+  background: linear-gradient(90deg, var(--green-dark), transparent);
+}
+
+#ticker-wrap::after {
+  right: 0;
+  background: linear-gradient(-90deg, var(--green-dark), transparent);
+}
+
+.ticker-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--green);
+  background: var(--green-dark);
+  padding: 0 16px;
+  position: absolute; left: 0; z-index: 3;
+  white-space: nowrap;
+  border-right: 1px solid var(--border-bright);
+  height: 100%;
+  display: flex; align-items: center;
+}
+
+.ticker-track {
+  display: flex; align-items: center;
+  animation: tickerScroll 40s linear infinite;
+  white-space: nowrap;
+  padding-left: 100px;
+}
+
+.ticker-track:hover { animation-play-state: paused; }
+
+@keyframes tickerScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.ticker-item {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--text);
+  padding: 0 24px;
+  display: inline-flex; align-items: center; gap: 8px;
+  border-right: 1px solid var(--border);
+}
+
+.ticker-item .tick-score {
+  font-weight: 700;
+  padding: 1px 5px;
+  font-size: 9px;
+}
+
+.tick-score.pos { color: var(--green); }
+.tick-score.neg { color: var(--red); }
+.tick-score.neu { color: var(--amber); }
+
+/* ═══════════════════════════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════════════════════════ */
+.main-wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto;
+  gap: 16px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PANEL BASE — with animated corners
+═══════════════════════════════════════════════════════════════ */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  position: relative;
+  padding: 20px;
+  transition: border-color 0.3s;
+}
+
+.panel:hover {
+  border-color: var(--border-bright);
+}
+
+/* Animated corner brackets */
+.panel::before,
+.panel::after,
+.panel .panel-corner-br,
+.panel .panel-corner-bl {
+  content: '';
+  position: absolute;
+  width: 12px; height: 12px;
+  border-color: var(--green-dim);
+  border-style: solid;
+  transition: border-color 0.3s;
+  pointer-events: none;
+}
+
+.panel::before {
+  top: -1px; left: -1px;
+  border-width: 2px 0 0 2px;
+}
+
+.panel::after {
+  top: -1px; right: -1px;
+  border-width: 2px 2px 0 0;
+}
+
+.panel .panel-corner-br {
+  content: '';
+  position: absolute;
+  bottom: -1px; right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+.panel .panel-corner-bl {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: -1px;
+  border-width: 0 0 2px 2px;
+}
+
+.panel:hover::before,
+.panel:hover::after,
+.panel:hover .panel-corner-br,
+.panel:hover .panel-corner-bl {
+  border-color: var(--green);
+}
+
+.panel-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.panel-title::before {
+  content: '';
+  display: inline-block;
+  width: 3px; height: 10px;
+  background: var(--green);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GAUGE PANEL
+═══════════════════════════════════════════════════════════════ */
+.panel-gauge {
+  grid-column: span 2;
+  display: flex;
+  gap: 32px;
+  align-items: center;
+  min-height: 260px;
+}
+
+.gauge-left {
+  flex: 0 0 280px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+
+#gaugeCanvas {
+  display: block;
+}
+
+.gauge-score-display {
+  text-align: center;
+  margin-top: -10px;
+}
+
+.gauge-score-value {
+  font-family: var(--font-display);
+  font-size: 56px;
+  line-height: 1;
+  color: var(--green);
+  text-shadow: 0 0 20px rgba(0,255,106,0.5);
+  letter-spacing: 0.05em;
+}
+
+.gauge-score-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.gauge-right {
+  flex: 1;
+  display: flex; flex-direction: column; gap: 20px;
+}
+
+/* Mood & Issue */
+.community-mood {
+  font-family: var(--font-body);
+  font-style: italic;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--text);
+  border-left: 3px solid var(--green-dim);
+  padding-left: 14px;
+}
+
+.trending-issue-box {
+  background: rgba(255,184,0,0.06);
+  border: 1px solid var(--amber-dim);
+  padding: 12px 16px;
+  display: flex; align-items: flex-start; gap: 10px;
+  position: relative;
+}
+
+.trending-issue-box::before,
+.trending-issue-box::after {
+  content: '';
+  position: absolute;
+  width: 8px; height: 8px;
+  border-color: var(--amber);
+  border-style: solid;
+}
+
+.trending-issue-box::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+.trending-issue-box::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+.trending-icon {
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.trending-content {}
+
+.trending-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  color: var(--amber-dim);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.trending-text {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DISTRIBUTION PANEL
+═══════════════════════════════════════════════════════════════ */
+.panel-distrib {
+  grid-column: span 1;
+  display: flex; flex-direction: column; justify-content: space-between;
+  min-height: 260px;
+}
+
+.doughnut-wrap {
+  display: flex; align-items: center; gap: 20px; flex: 1;
+  justify-content: center;
+}
+
+#doughnutCanvas {
+  max-width: 160px; max-height: 160px;
+}
+
+.doughnut-legend {
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.legend-item {
+  display: flex; align-items: center; gap: 8px;
+}
+
+.legend-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+
+.legend-name {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.1em;
+  color: var(--text-dim); text-transform: uppercase;
+  width: 60px;
+}
+
+.legend-pct {
+  font-family: var(--font-display);
+  font-size: 20px; color: var(--text);
+  line-height: 1;
+}
+
+.distrib-bar {
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  background: var(--bg3);
+  margin-top: 8px;
+}
+
+.distrib-segment {
+  height: 100%;
+  transition: width 1s ease;
+}
+
+.distrib-segment.pos { background: var(--green); }
+.distrib-segment.neu { background: var(--amber); }
+.distrib-segment.neg { background: var(--red); }
+
+/* ═══════════════════════════════════════════════════════════════
+   SUBREDDIT BREAKDOWN CARDS
+═══════════════════════════════════════════════════════════════ */
+.panel-subreddits {
+  grid-column: span 3;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  background: transparent; border: none; padding: 0;
+}
+
+.panel-subreddits::before,
+.panel-subreddits::after,
+.panel-subreddits .panel-corner-br,
+.panel-subreddits .panel-corner-bl {
+  display: none;
+}
+
+.sub-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 18px 20px;
+  position: relative;
+}
+
+.sub-card::before,
+.sub-card::after {
+  content: '';
+  position: absolute;
+  width: 10px; height: 10px;
+  border-color: var(--green-dim);
+  border-style: solid;
+  pointer-events: none;
+}
+
+.sub-card::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+.sub-card::after { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+
+.sub-card:hover { border-color: var(--border-bright); }
+
+.sub-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.sub-name {
+  font-family: var(--font-display);
+  font-size: 22px; letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+.sub-name span { color: var(--green); }
+
+.sub-score-badge {
+  font-family: var(--font-display);
+  font-size: 32px;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+.sub-stats {
+  display: flex; gap: 20px; margin-bottom: 12px;
+}
+
+.sub-stat {
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.sub-stat-val {
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.sub-stat-lbl {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.mini-bar {
+  height: 4px;
+  background: var(--bg3);
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+}
+
+.mini-seg {
+  height: 100%;
+}
+
+.mini-seg.pos { background: var(--green); }
+.mini-seg.neu { background: var(--amber); }
+.mini-seg.neg { background: var(--red); }
+
+/* ═══════════════════════════════════════════════════════════════
+   WORD CLOUD PANEL
+═══════════════════════════════════════════════════════════════ */
+.panel-wordcloud {
+  grid-column: span 2;
+  min-height: 300px;
+}
+
+#wordcloudCanvas {
+  width: 100%; height: 250px;
+  display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HOT TOPICS
+═══════════════════════════════════════════════════════════════ */
+.panel-topics {
+  grid-column: span 1;
+  min-height: 300px;
+}
+
+.topics-grid {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;
+}
+
+.topic-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--green);
+  background: rgba(0,255,106,0.06);
+  border: 1px solid rgba(0,255,106,0.25);
+  padding: 6px 12px;
+  cursor: default;
+  transition: all 0.2s;
+  opacity: 0;
+  transform: translateY(6px);
+  animation: chipFadeIn 0.4s forwards;
+}
+
+.topic-chip:hover {
+  background: rgba(0,255,106,0.12);
+  box-shadow: 0 0 10px rgba(0,255,106,0.15);
+}
+
+@keyframes chipFadeIn {
+  to { opacity: 1; transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   POST FEED
+═══════════════════════════════════════════════════════════════ */
+.panel-feed {
+  grid-column: span 3;
+}
+
+.feed-list {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 4px;
+  max-height: 640px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-bright) var(--bg3);
+}
+
+.feed-list::-webkit-scrollbar { width: 4px; }
+.feed-list::-webkit-scrollbar-track { background: var(--bg3); }
+.feed-list::-webkit-scrollbar-thumb { background: var(--border-bright); }
+
+.feed-post {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg3);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s;
+  border-left: 2px solid transparent;
+  opacity: 0;
+  animation: postFadeIn 0.3s forwards;
+}
+
+@keyframes postFadeIn {
+  to { opacity: 1; }
+}
+
+.feed-post:hover {
+  background: var(--bg2);
+  border-color: var(--border);
+  border-left-color: var(--green-dim);
+}
+
+.post-score-badge {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.05em;
+  width: 52px;
+  text-align: center;
+  padding: 2px 4px;
+  line-height: 1.1;
+}
+
+.post-score-badge.pos { color: var(--green); }
+.post-score-badge.neg { color: var(--red); }
+.post-score-badge.neu { color: var(--amber); }
+
+.post-body { flex: 1; min-width: 0; }
+
+.post-meta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.post-subreddit {
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.15em;
+  color: var(--green-dim);
+  text-transform: uppercase;
+}
+
+.post-flair {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.04);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+.post-time {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.post-title {
+  font-family: var(--font-body);
+  font-size: 14px; font-weight: 400;
+  color: var(--text);
+  line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.feed-post:hover .post-title { color: #fff; }
+
+.post-stats {
+  display: flex; align-items: center; gap: 14px; margin-top: 4px;
+}
+
+.post-stat {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  display: flex; align-items: center; gap: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ERROR STATE
+═══════════════════════════════════════════════════════════════ */
+.error-banner {
+  grid-column: span 3;
+  background: rgba(255,51,51,0.08);
+  border: 1px solid var(--red-dim);
+  padding: 16px 20px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--red);
+  letter-spacing: 0.1em;
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .main-wrap { grid-template-columns: 1fr 1fr; }
+  .panel-gauge, .panel-subreddits, .panel-feed, .panel-wordcloud,
+  .error-banner { grid-column: span 2; }
+  .panel-topics, .panel-distrib { grid-column: span 2; }
+  .gauge-left { flex: 0 0 220px; }
+}
+
+@media (max-width: 600px) {
+  .main-wrap { grid-template-columns: 1fr; }
+  .panel-gauge, .panel-subreddits, .panel-feed, .panel-wordcloud,
+  .panel-topics, .panel-distrib, .error-banner { grid-column: span 1; }
+  .panel-gauge { flex-direction: column; }
+  .panel-subreddits { grid-template-columns: 1fr; }
+  .doughnut-wrap { flex-direction: column; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UTILITY
+═══════════════════════════════════════════════════════════════ */
+.text-green  { color: var(--green); }
+.text-amber  { color: var(--amber); }
+.text-red    { color: var(--red); }
+.text-dim    { color: var(--text-dim); }
+.mono        { font-family: var(--font-mono); }
+.display     { font-family: var(--font-display); }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--border) 50%, var(--bg3) 75%);
+  background-size: 400% 100%;
+  animation: skeletonAnim 1.5s infinite;
+  border-radius: 2px;
+  color: transparent !important;
+  user-select: none;
+}
+
+@keyframes skeletonAnim {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ LOADING OVERLAY ═══ -->
+<div id="loading-overlay">
+  <div class="load-logo">CODM SENTINEL</div>
+  <div class="load-subtitle">Community Intelligence Network</div>
+  <div class="load-bar-wrap">
+    <div class="load-bar" id="loadBar"></div>
+  </div>
+  <div class="load-status" id="loadStatus">INITIALIZING...</div>
+</div>
+
+<!-- ═══ HEADER ═══ -->
+<header id="site-header">
+  <div class="header-left">
+    <div class="header-logo">CODM SENTINEL</div>
+    <div class="header-divider"></div>
+    <div class="status-dot-wrap">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-label" id="statusLabel">LIVE</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="last-updated" id="lastUpdatedLabel"></span>
+    <button class="btn-refresh" id="refreshBtn" onclick="refreshData()">↺ REFRESH</button>
+  </div>
+</header>
+
+<!-- ═══ TICKER ═══ -->
+<div id="ticker-wrap">
+  <span class="ticker-label">// LIVE INTEL</span>
+  <div class="ticker-track" id="tickerTrack">
+    <span class="ticker-item">LOADING SENTIMENT DATA<span class="tick-score neu">···</span></span>
+    <span class="ticker-item">LOADING SENTIMENT DATA<span class="tick-score neu">···</span></span>
+  </div>
+</div>
+
+<!-- ═══ MAIN ═══ -->
+<main class="main-wrap">
+
+  <!-- Error Banner -->
+  <div class="error-banner" id="errorBanner"></div>
+
+  <!-- ─── GAUGE ─────────────────────────────────────────────── -->
+  <div class="panel panel-gauge" id="panelGauge">
+    <div class="panel-corner-br"></div><div class="panel-corner-bl"></div>
+    <div class="gauge-left">
+      <div class="panel-title">// SENTIMENT INDEX</div>
+      <canvas id="gaugeCanvas" width="280" height="160"></canvas>
+      <div class="gauge-score-display">
+        <div class="gauge-score-value" id="gaugeScoreVal">—</div>
+        <div class="gauge-score-label">OVERALL SCORE</div>
+      </div>
+    </div>
+    <div class="gauge-right">
+      <div class="panel-title">// COMMUNITY INTEL</div>
+      <div class="community-mood" id="communityMood">Awaiting intelligence feed...</div>
+      <div class="trending-issue-box">
+        <div class="trending-icon">⚠</div>
+        <div class="trending-content">
+          <div class="trending-label">Trending Issue</div>
+          <div class="trending-text" id="trendingIssue">Scanning community channels...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── DISTRIBUTION ──────────────────────────────────────── -->
+  <div class="panel panel-distrib" id="panelDistrib">
+    <div class="panel-corner-br"></div><div class="panel-corner-bl"></div>
+    <div class="panel-title">// SENTIMENT SPLIT</div>
+    <div class="doughnut-wrap">
+      <canvas id="doughnutCanvas"></canvas>
+      <div class="doughnut-legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--green)"></div>
+          <span class="legend-name">POSITIVE</span>
+          <span class="legend-pct text-green" id="legPos">—</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--amber)"></div>
+          <span class="legend-name">NEUTRAL</span>
+          <span class="legend-pct text-amber" id="legNeu">—</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--red)"></div>
+          <span class="legend-name">NEGATIVE</span>
+          <span class="legend-pct text-red" id="legNeg">—</span>
+        </div>
+      </div>
+    </div>
+    <div class="distrib-bar">
+      <div class="distrib-segment pos" id="distribPos" style="width:0%"></div>
+      <div class="distrib-segment neu" id="distribNeu" style="width:0%"></div>
+      <div class="distrib-segment neg" id="distribNeg" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- ─── SUBREDDITS ────────────────────────────────────────── -->
+  <div class="panel-subreddits panel" id="panelSubs">
+    <div id="subCardCODM" class="sub-card">
+      <div class="sub-card-header">
+        <div class="sub-name"><span>r/</span>CODM</div>
+        <div class="sub-score-badge text-green" id="subScoreCODM">—</div>
+      </div>
+      <div class="sub-stats">
+        <div class="sub-stat">
+          <span class="sub-stat-val text-green" id="subPosCODM">—</span>
+          <span class="sub-stat-lbl">Positive</span>
+        </div>
+        <div class="sub-stat">
+          <span class="sub-stat-val text-amber" id="subNeuCODM">—</span>
+          <span class="sub-stat-lbl">Neutral</span>
+        </div>
+        <div class="sub-stat">
+          <span class="sub-stat-val text-red" id="subNegCODM">—</span>
+          <span class="sub-stat-lbl">Negative</span>
+        </div>
+        <div class="sub-stat">
+          <span class="sub-stat-val" id="subCountCODM">—</span>
+          <span class="sub-stat-lbl">Posts</span>
+        </div>
+      </div>
+      <div class="mini-bar" id="minibCODM">
+        <div class="mini-seg pos" style="width:0%"></div>
+        <div class="mini-seg neu" style="width:0%"></div>
+        <div class="mini-seg neg" style="width:0%"></div>
+      </div>
+    </div>
+    <div id="subCardCODMobile" class="sub-card">
+      <div class="sub-card-header">
+        <div class="sub-name"><span>r/</span>CallofDutyMobile</div>
+        <div class="sub-score-badge text-green" id="subScoreCODMobile">—</div>
+      </div>
+      <div class="sub-stats">
+        <div class="sub-stat">
+          <span class="sub-stat-val text-green" id="subPosCODMobile">—</span>
+          <span class="sub-stat-lbl">Positive</span>
+        </div>
+        <div class="sub-stat">
+          <span class="sub-stat-val text-amber" id="subNeuCODMobile">—</span>
+          <span class="sub-stat-lbl">Neutral</span>
+        </div>
+        <div class="sub-stat">
+          <span class="sub-stat-val text-red" id="subNegCODMobile">—</span>
+          <span class="sub-stat-lbl">Negative</span>
+        </div>
+        <div class="sub-stat">
+          <span class="sub-stat-val" id="subCountCODMobile">—</span>
+          <span class="sub-stat-lbl">Posts</span>
+        </div>
+      </div>
+      <div class="mini-bar" id="minibCODMobile">
+        <div class="mini-seg pos" style="width:0%"></div>
+        <div class="mini-seg neu" style="width:0%"></div>
+        <div class="mini-seg neg" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── WORD CLOUD ────────────────────────────────────────── -->
+  <div class="panel panel-wordcloud">
+    <div class="panel-corner-br"></div><div class="panel-corner-bl"></div>
+    <div class="panel-title">// WORD FREQUENCY ANALYSIS</div>
+    <canvas id="wordcloudCanvas"></canvas>
+  </div>
+
+  <!-- ─── HOT TOPICS ────────────────────────────────────────── -->
+  <div class="panel panel-topics">
+    <div class="panel-corner-br"></div><div class="panel-corner-bl"></div>
+    <div class="panel-title">// HOT TOPICS</div>
+    <div class="topics-grid" id="topicsGrid">
+      <div class="topic-chip skeleton">loading...</div>
+      <div class="topic-chip skeleton">loading...</div>
+      <div class="topic-chip skeleton">loading...</div>
+    </div>
+  </div>
+
+  <!-- ─── POST FEED ─────────────────────────────────────────── -->
+  <div class="panel panel-feed">
+    <div class="panel-corner-br"></div><div class="panel-corner-bl"></div>
+    <div class="panel-title">// LIVE POST FEED <span style="margin-left:8px;color:var(--text-dim);" id="feedCount"></span></div>
+    <div class="feed-list" id="feedList">
+      <!-- populated by JS -->
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ─── CONFIG ────────────────────────────────────────────────────────────────────
+const WORKER_URL = 'https://YOUR_WORKER_NAME.YOUR_SUBDOMAIN.workers.dev';
+const AUTO_REFRESH_MS = 15 * 60 * 1000; // 15 minutes
+
+// ─── STATE ─────────────────────────────────────────────────────────────────────
+let currentData = null;
+let doughnutChart = null;
+let refreshTimer = null;
+let isLoading = false;
+
+// ─── LOADING PROGRESS ──────────────────────────────────────────────────────────
+const loadSteps = [
+  { pct: 10, msg: 'ESTABLISHING CONNECTION...' },
+  { pct: 25, msg: 'SCRAPING REDDIT FEEDS...' },
+  { pct: 50, msg: 'RUNNING SENTIMENT ANALYSIS...' },
+  { pct: 75, msg: 'PROCESSING WORD FREQUENCIES...' },
+  { pct: 90, msg: 'RENDERING DASHBOARD...' },
+  { pct: 100, msg: 'INTELLIGENCE READY.' },
+];
+
+let loadStepIdx = 0;
+let loadInterval = null;
+
+function startLoadAnimation() {
+  loadStepIdx = 0;
+  document.getElementById('loadBar').style.width = '0%';
+  document.getElementById('loadStatus').textContent = loadSteps[0].msg;
+  loadInterval = setInterval(() => {
+    loadStepIdx = Math.min(loadStepIdx + 1, loadSteps.length - 1);
+    const s = loadSteps[loadStepIdx];
+    document.getElementById('loadBar').style.width = s.pct + '%';
+    document.getElementById('loadStatus').textContent = s.msg;
+  }, 800);
+}
+
+function endLoadAnimation() {
+  clearInterval(loadInterval);
+  const bar = document.getElementById('loadBar');
+  bar.style.width = '100%';
+  document.getElementById('loadStatus').textContent = 'INTELLIGENCE READY.';
+  setTimeout(() => {
+    const overlay = document.getElementById('loading-overlay');
+    overlay.classList.add('fade-out');
+    setTimeout(() => { overlay.style.display = 'none'; }, 700);
+  }, 500);
+}
+
+// ─── TIME FORMATTING ───────────────────────────────────────────────────────────
+function timeAgo(utc) {
+  const diff = Math.floor(Date.now() / 1000) - utc;
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
+function formatScore(s) {
+  return (s >= 0 ? '+' : '') + s.toFixed(2);
+}
+
+function scoreClass(s) {
+  if (s > 0.15) return 'pos';
+  if (s < -0.15) return 'neg';
+  return 'neu';
+}
+
+function scoreColor(s) {
+  if (s > 0.15) return 'var(--green)';
+  if (s < -0.15) return 'var(--red)';
+  return 'var(--amber)';
+}
+
+// ─── GAUGE CANVAS ──────────────────────────────────────────────────────────────
+function drawGauge(score) {
+  const canvas = document.getElementById('gaugeCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H - 20;
+  const r = Math.min(W / 2, H) - 20;
+  const startAngle = Math.PI;
+  const endAngle = 0;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Arc background
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, startAngle, endAngle);
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = '#1a2e22';
+  ctx.lineCap = 'butt';
+  ctx.stroke();
+
+  // Gradient arc (red → amber → green)
+  const gradient = ctx.createConicGradient(startAngle, cx, cy);
+  gradient.addColorStop(0, '#ff3333');
+  gradient.addColorStop(0.5, '#ffb800');
+  gradient.addColorStop(1, '#00ff6a');
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, startAngle, endAngle);
+  ctx.lineWidth = 14;
+  ctx.strokeStyle = gradient;
+  ctx.lineCap = 'butt';
+  ctx.stroke();
+
+  // Tick marks
+  for (let i = 0; i <= 8; i++) {
+    const angle = startAngle + (i / 8) * Math.PI;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const inner = r - 20, outer = r - 8;
+    ctx.beginPath();
+    ctx.moveTo(cx + cos * inner, cy + sin * inner);
+    ctx.lineTo(cx + cos * outer, cy + sin * outer);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(200,224,205,0.25)';
+    ctx.stroke();
+  }
+
+  // Needle
+  const clampedScore = Math.max(-1, Math.min(1, score));
+  const needleAngle = startAngle + ((clampedScore + 1) / 2) * Math.PI;
+  const needleLen = r - 24;
+  const nx = cx + Math.cos(needleAngle) * needleLen;
+  const ny = cy + Math.sin(needleAngle) * needleLen;
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(nx, ny);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.shadowColor = '#ffffff';
+  ctx.shadowBlur = 8;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Center pivot
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+
+  // Labels
+  ctx.font = '10px "Share Tech Mono"';
+  ctx.fillStyle = '#ff3333';
+  ctx.textAlign = 'center';
+  ctx.fillText('-1.0', cx - r + 2, cy - 4);
+  ctx.fillStyle = '#00ff6a';
+  ctx.fillText('+1.0', cx + r - 2, cy - 4);
+  ctx.fillStyle = '#ffb800';
+  ctx.fillText('0.0', cx, cy - r - 6);
+}
+
+// ─── DOUGHNUT CHART ────────────────────────────────────────────────────────────
+function renderDoughnut(pos, neu, neg) {
+  const ctx = document.getElementById('doughnutCanvas').getContext('2d');
+  if (doughnutChart) doughnutChart.destroy();
+  doughnutChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Positive', 'Neutral', 'Negative'],
+      datasets: [{
+        data: [pos, neu, neg],
+        backgroundColor: ['#00cc55', '#cc9400', '#cc2222'],
+        borderColor: ['#00ff6a', '#ffb800', '#ff3333'],
+        borderWidth: 1,
+        hoverOffset: 4,
+      }],
+    },
+    options: {
+      responsive: false,
+      cutout: '68%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` ${ctx.label}: ${ctx.parsed}%`,
+          },
+        },
+      },
+      animation: { animateRotate: true, duration: 800 },
+    },
+  });
+}
+
+// ─── WORD CLOUD ────────────────────────────────────────────────────────────────
+function renderWordCloud(wordData) {
+  const canvas = document.getElementById('wordcloudCanvas');
+  const W = canvas.parentElement.clientWidth - 40;
+  const H = 250;
+  canvas.width = W;
+  canvas.height = H;
+
+  const maxFreq = wordData[0]?.[1] || 1;
+  const words = wordData.slice(0, 50).map(([word, count]) => {
+    const size = Math.floor(12 + (count / maxFreq) * 42);
+    const colors = [
+      '#00ff6a', '#00cc55', '#00aa44',
+      '#ffb800', '#cc9400', '#887300',
+      '#88eeaa',
+    ];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    return [word, size, color];
+  });
+
+  WordCloud(canvas, {
+    list: words.map(([w, s, c]) => [w, s]),
+    fontFamily: 'Bebas Neue, sans-serif',
+    color: (word, weight) => {
+      const entry = words.find(([w]) => w === word);
+      return entry ? entry[2] : '#00ff6a';
+    },
+    backgroundColor: 'transparent',
+    rotateRatio: 0.3,
+    rotationSteps: 2,
+    minSize: 10,
+    shuffle: true,
+    gridSize: 8,
+    weightFactor: 1,
+  });
+}
+
+// ─── TICKER ────────────────────────────────────────────────────────────────────
+function updateTicker(posts) {
+  const items = posts.slice(0, 20);
+  const html = items.map(p => {
+    const sc = scoreClass(p.sentiment_score);
+    const label = sc === 'pos' ? '▲' : sc === 'neg' ? '▼' : '—';
+    const title = p.title.length > 60 ? p.title.slice(0, 57) + '...' : p.title;
+    return `<span class="ticker-item">${title}<span class="tick-score ${sc}">${label} ${formatScore(p.sentiment_score)}</span></span>`;
+  }).join('');
+  const track = document.getElementById('tickerTrack');
+  track.innerHTML = html + html; // duplicate for seamless loop
+}
+
+// ─── SUBREDDIT CARDS ───────────────────────────────────────────────────────────
+function updateSubCard(id, data) {
+  const total = data.post_count || 1;
+  const sc = formatScore(data.avg_score);
+  const cls = scoreClass(data.avg_score);
+  document.getElementById('subScore' + id).textContent = sc;
+  document.getElementById('subScore' + id).className = `sub-score-badge text-${cls === 'pos' ? 'green' : cls === 'neg' ? 'red' : 'amber'}`;
+  document.getElementById('subPos' + id).textContent = data.positive;
+  document.getElementById('subNeu' + id).textContent = data.neutral;
+  document.getElementById('subNeg' + id).textContent = data.negative;
+  document.getElementById('subCount' + id).textContent = data.post_count;
+
+  const minibar = document.getElementById('minib' + id);
+  const segs = minibar.querySelectorAll('.mini-seg');
+  segs[0].style.width = ((data.positive / total) * 100) + '%';
+  segs[1].style.width = ((data.neutral  / total) * 100) + '%';
+  segs[2].style.width = ((data.negative / total) * 100) + '%';
+}
+
+// ─── POST FEED ─────────────────────────────────────────────────────────────────
+function renderFeed(posts) {
+  const list = document.getElementById('feedList');
+  document.getElementById('feedCount').textContent = `(${posts.length} POSTS)`;
+  list.innerHTML = '';
+
+  posts.forEach((p, i) => {
+    const sc = scoreClass(p.sentiment_score);
+    const delay = Math.min(i * 18, 400);
+    const a = document.createElement('a');
+    a.href = p.url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.className = 'feed-post';
+    a.style.animationDelay = delay + 'ms';
+    a.innerHTML = `
+      <div class="post-score-badge ${sc}">${formatScore(p.sentiment_score)}</div>
+      <div class="post-body">
+        <div class="post-meta">
+          <span class="post-subreddit">r/${p.subreddit}</span>
+          ${p.link_flair_text ? `<span class="post-flair">${p.link_flair_text}</span>` : ''}
+          <span class="post-time">${timeAgo(p.created_utc)}</span>
+        </div>
+        <div class="post-title">${escHtml(p.title)}</div>
+        <div class="post-stats">
+          <span class="post-stat">▲ ${fmtNum(p.score)}</span>
+          <span class="post-stat">💬 ${fmtNum(p.num_comments)}</span>
+        </div>
+      </div>
+    `;
+    list.appendChild(a);
+  });
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtNum(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return n;
+}
+
+// ─── MAIN RENDER ───────────────────────────────────────────────────────────────
+function renderDashboard(data) {
+  const { summary, subreddit_breakdown, word_cloud, posts } = data;
+
+  // Gauge
+  const score = summary.overall_score;
+  drawGauge(score);
+  const scoreEl = document.getElementById('gaugeScoreVal');
+  scoreEl.textContent = formatScore(score);
+  scoreEl.style.color = scoreColor(score);
+  scoreEl.style.textShadow = `0 0 20px ${scoreColor(score)}80`;
+
+  // Mood & Trending
+  document.getElementById('communityMood').textContent = `"${summary.community_mood}"`;
+  document.getElementById('trendingIssue').textContent = summary.trending_issue;
+
+  // Distribution
+  document.getElementById('legPos').textContent = summary.positive_pct + '%';
+  document.getElementById('legNeu').textContent = summary.neutral_pct + '%';
+  document.getElementById('legNeg').textContent = summary.negative_pct + '%';
+  document.getElementById('distribPos').style.width = summary.positive_pct + '%';
+  document.getElementById('distribNeu').style.width = summary.neutral_pct + '%';
+  document.getElementById('distribNeg').style.width = summary.negative_pct + '%';
+  renderDoughnut(summary.positive_pct, summary.neutral_pct, summary.negative_pct);
+
+  // Subreddits
+  updateSubCard('CODM', subreddit_breakdown.CODM);
+  updateSubCard('CODMobile', subreddit_breakdown.CallofDutyMobile);
+
+  // Topics
+  const topicsGrid = document.getElementById('topicsGrid');
+  topicsGrid.innerHTML = '';
+  (summary.top_topics || []).forEach((t, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'topic-chip';
+    chip.textContent = t.toUpperCase();
+    chip.style.animationDelay = (i * 80) + 'ms';
+    topicsGrid.appendChild(chip);
+  });
+
+  // Word cloud
+  if (word_cloud && word_cloud.length > 0) {
+    setTimeout(() => renderWordCloud(word_cloud), 300);
+  }
+
+  // Ticker
+  updateTicker(posts);
+
+  // Feed
+  renderFeed(posts);
+
+  // Status
+  const dot = document.getElementById('statusDot');
+  const lbl = document.getElementById('statusLabel');
+  dot.className = 'status-dot' + (data.cached ? ' stale' : '');
+  lbl.textContent = data.cached ? 'CACHED' : 'LIVE';
+  document.getElementById('lastUpdatedLabel').textContent =
+    'LAST FETCH: ' + new Date(data.generated_at).toLocaleTimeString();
+}
+
+// ─── FETCH DATA ────────────────────────────────────────────────────────────────
+async function fetchData(isFirst = false) {
+  if (isLoading) return;
+  isLoading = true;
+
+  const btn = document.getElementById('refreshBtn');
+  btn.textContent = '↻ SCANNING...';
+  btn.classList.add('loading');
+
+  const dot = document.getElementById('statusDot');
+  const lbl = document.getElementById('statusLabel');
+  dot.className = 'status-dot stale';
+  lbl.textContent = 'FETCHING';
+
+  if (isFirst) startLoadAnimation();
+
+  try {
+    const res = await fetch(`${WORKER_URL}/api/sentiment`, {
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const data = await res.json();
+    currentData = data;
+    renderDashboard(data);
+    hideError();
+  } catch (err) {
+    console.error('Fetch error:', err);
+    showError(`SIGNAL LOST — ${err.message}. Check that WORKER_URL is configured and the Worker is deployed.`);
+    dot.className = 'status-dot error';
+    lbl.textContent = 'ERROR';
+    drawGauge(0);
+  } finally {
+    isLoading = false;
+    btn.textContent = '↺ REFRESH';
+    btn.classList.remove('loading');
+    if (isFirst) endLoadAnimation();
+    scheduleRefresh();
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBanner');
+  el.style.display = 'block';
+  el.textContent = '// ' + msg;
+}
+
+function hideError() {
+  document.getElementById('errorBanner').style.display = 'none';
+}
+
+function refreshData() {
+  clearTimeout(refreshTimer);
+  fetchData(false);
+}
+
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => fetchData(false), AUTO_REFRESH_MS);
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  drawGauge(0); // draw empty gauge immediately
+  fetchData(true);
+});
+
+window.addEventListener('resize', () => {
+  if (currentData?.word_cloud) {
+    renderWordCloud(currentData.word_cloud);
+  }
+  if (currentData?.summary) {
+    drawGauge(currentData.summary.overall_score);
+  }
+});
+</script>
+</body>
+</html>
