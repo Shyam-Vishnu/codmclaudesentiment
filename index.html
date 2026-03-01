@@ -1285,52 +1285,67 @@ function renderDoughnut(pos, neu, neg) {
 
 // ─── WORD CLOUD ────────────────────────────────────────────────────────────────
 function renderWordCloud(wordData) {
-  const canvas = document.getElementById('wordcloudCanvas');
-  const parent = canvas.parentElement;
-
-  // Get real pixel dimensions — use offsetWidth to force layout
-  const W = parent.offsetWidth - 40;
-  const H = 260;
-
-  if (W <= 0) {
-    // Panel hasn't painted yet, try again shortly
-    setTimeout(() => renderWordCloud(wordData), 150);
-    return;
+  const container = document.getElementById('wordcloudCanvas').parentElement;
+  
+  // Replace canvas with a styled HTML word cloud — 100% reliable
+  let cloud = document.getElementById('wordcloudInner');
+  if (!cloud) {
+    cloud = document.createElement('div');
+    cloud.id = 'wordcloudInner';
+    cloud.style.cssText = `
+      width: 100%;
+      min-height: 240px;
+      padding: 12px 8px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 6px 10px;
+      line-height: 1;
+    `;
+    const canvas = document.getElementById('wordcloudCanvas');
+    canvas.replaceWith(cloud);
   }
 
-  canvas.width  = W;
-  canvas.height = H;
-
-  const maxFreq = wordData[0]?.[1] || 1;
   const palette = [
-    '#00ff6a','#00cc55','#00aa44','#007733',
-    '#ffb800','#cc9400','#887300',
-    '#88eeaa','#44cc88',
+    '#00ff6a','#00cc55','#00aa44',
+    '#ffb800','#cc9400',
+    '#88eebb','#44cc88','#007733',
+    '#ffe066','#66ffaa',
   ];
 
-  // Build list as [word, weight] — weight drives fontSize via weightFactor
-  const list = wordData.slice(0, 50).map(([word, count]) => [word, count]);
+  const maxFreq = wordData[0]?.[1] || 1;
+  const minFont = 11;
+  const maxFont = 52;
 
-  document.fonts.ready.then(() => {
-    WordCloud(canvas, {
-      list,
-      fontFamily: '"Bebas Neue", sans-serif',
-      weightFactor: (size) => {
-        // Map raw frequency to a px font size between 13 and 54
-        return 13 + (size / maxFreq) * 41;
-      },
-      color: (word) => palette[Math.abs(
-        word.split('').reduce((a, c) => a + c.charCodeAt(0), 0)
-      ) % palette.length],
-      backgroundColor: 'transparent',
-      rotateRatio: 0.25,
-      rotationSteps: 2,
-      minSize: 10,
-      gridSize: Math.round(W / 60),
-      shuffle: false,
-      drawOutOfBound: false,
-    });
-  });
+  cloud.innerHTML = wordData.slice(0, 55).map(([word, count]) => {
+    const ratio = count / maxFreq;
+    const fontSize = Math.round(minFont + ratio * (maxFont - minFont));
+    const opacity = 0.55 + ratio * 0.45;
+    // Pick color deterministically from word characters
+    const colorIdx = word.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % palette.length;
+    const color = palette[colorIdx];
+    // Slight random rotation for visual interest (-15 to +15 deg)
+    const rotation = (((word.charCodeAt(0) * 7 + word.length * 13) % 31) - 15);
+    const shouldRotate = ratio < 0.6 && word.length < 10; // only rotate smaller words
+
+    return `<span style="
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: ${fontSize}px;
+      color: ${color};
+      opacity: ${opacity};
+      cursor: default;
+      display: inline-block;
+      transform: rotate(${shouldRotate ? rotation : 0}deg);
+      transition: opacity 0.2s, transform 0.2s;
+      text-shadow: 0 0 ${Math.round(ratio * 12)}px ${color}66;
+      letter-spacing: 0.05em;
+      padding: 2px 3px;
+    " title="${count} mentions"
+       onmouseover="this.style.opacity=1;this.style.transform='rotate(0deg) scale(1.1)'"
+       onmouseout="this.style.opacity=${opacity};this.style.transform='rotate(${shouldRotate ? rotation : 0}deg)'"
+    >${word.toUpperCase()}</span>`;
+  }).join('');
 }
 
 // ─── TICKER ────────────────────────────────────────────────────────────────────
